@@ -1,0 +1,6 @@
+{
+ "plu": "https://apicarto.ign.fr/api/gpu/zone-urba?geom=%7B%22type%22%3A%22Polygon%22%2C%22coordinates%22%3A%5B%5B%5B2.328504%2C48.804939%5D%2C%5B2.328324%2C48.81885%5D%2C%5B2.35679%2C48.819007%5D%2C%5B2.356962%2C48.805096%5D%2C%5B2.328504%2C48.804939%5D%5D%5D%7D",
+ "sup": "https://apicarto.ign.fr/api/gpu/assiette-sup-s?geom=%7B%22type%22%3A%22Polygon%22%2C%22coordinates%22%3A%5B%5B%5B2.328504%2C48.804939%5D%2C%5B2.328324%2C48.81885%5D%2C%5B2.35679%2C48.819007%5D%2C%5B2.356962%2C48.805096%5D%2C%5B2.328504%2C48.804939%5D%5D%5D%7D",
+ "rga": "https://mapsref.brgm.fr/wxs/georisques/risques?service=WFS&version=2.0.0&request=GetFeature&typeNames=ms:ALEARG_REALISE&srsName=EPSG:2154&bbox=650731,6856355,652722,6857803,urn:ogc:def:crs:EPSG::2154&outputFormat=geojson",
+ "gares": "https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/emplacement-des-gares-idf/exports/geojson?where=within_distance%28geo_point_2d%2C%20geom%27POINT%282.3445%2048.8135%29%27%2C%203km%29"
+}

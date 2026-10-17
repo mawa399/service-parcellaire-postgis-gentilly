@@ -1,0 +1,23 @@
+# Configuration pg_featureserv — service parcellaire de Gentilly
+# Copier ce fichier en pg_featureserv.toml et renseigner le mot de passe du rôle gentilly_api
+# (créé par sql/08_couches_api.sql). Le fichier pg_featureserv.toml est ignoré par git.
+[Server]
+HttpHost = "localhost"
+HttpPort = 9010
+CORSOrigins = "*"
+AssetsPath = "./assets"
+ReadTimeoutSec = 5
+WriteTimeoutSec = 30
+
+[Database]
+DbConnection = "postgresql://gentilly_api:MOT_DE_PASSE@localhost:5432/gentilly"
+TableIncludes = ["gentilly.carte_parcelles", "gentilly.carte_batiments", "gentilly.carte_plu", "gentilly.carte_gares", "gentilly.carte_isochrones"]
+FunctionIncludes = ["gentilly"]
+
+[Paging]
+LimitDefault = 50
+LimitMax = 5000
+
+[Metadata]
+Title = "Service parcellaire de Gentilly"
+Description = "Fiches parcellaires PostGIS : cadastre, DVF, LiDAR HD, BAN, PLUi, risques, accès à pied"
