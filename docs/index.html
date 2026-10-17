@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Service parcellaire · Gentilly</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f6f5f1; --panel:#ffffff; --ink:#1d2421; --muted:#6b7570; --line:#e3e1da;
+  --accent:#1f6f5c; --accent-soft:#e3efe9; --warn:#9a3412; --warn-soft:#fbefe9;
+  --violet:#8b5cf6; --brique:#b91c1c; --sel:#1d4ed8;
+  --r-sm:6px; --r-md:10px; --r-lg:14px;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:14px/1.45 "IBM Plex Sans",system-ui,sans-serif;color:var(--ink);background:var(--bg);overflow:hidden}
+#map{position:absolute;inset:0;z-index:0}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---------- panneau flottant ---------- */
+#panel{position:absolute;z-index:500;top:14px;left:14px;bottom:14px;width:400px;background:var(--panel);
+  border-radius:var(--r-lg);box-shadow:0 1px 2px rgba(29,36,33,.08),0 12px 32px rgba(29,36,33,.14);display:flex;flex-direction:column;overflow:hidden}
+.head{padding:16px 18px 12px;border-bottom:1px solid var(--line)}
+.head h1{margin:0;font-size:17px;font-weight:600;letter-spacing:-.01em}
+.head p{margin:2px 0 0;color:var(--muted);font-size:12.5px}
+.search{position:relative;margin-top:12px}
+.search input{width:100%;padding:10px 12px 10px 34px;border:1px solid var(--line);border-radius:var(--r-sm);font:inherit;background:#fbfaf8}
+.search input:focus{outline:none;border-color:var(--accent);background:#fff;box-shadow:0 0 0 3px var(--accent-soft)}
+.search svg{position:absolute;left:11px;top:11px;width:15px;height:15px;color:var(--muted)}
+#sugg{position:absolute;left:0;right:0;top:calc(100% + 4px);background:#fff;border:1px solid var(--line);border-radius:var(--r-sm);
+  box-shadow:0 8px 20px rgba(29,36,33,.12);z-index:10;display:none;overflow:hidden}
+#sugg button{display:block;width:100%;text-align:left;border:0;background:none;padding:8px 12px;font:inherit;font-size:13px;cursor:pointer}
+#sugg button:hover,#sugg button.on{background:var(--accent-soft)}
+.hint{margin:7px 0 0;color:var(--muted);font-size:12px}
+#body{flex:1;overflow:auto;padding:16px 18px 22px;scroll-behavior:smooth}
+
+/* ---------- contenus ---------- */
+h2{font-size:13px;font-weight:600;margin:22px 0 8px;color:var(--ink)}
+h2 small{font-weight:400;color:var(--muted);margin-left:4px}
+.muted{color:var(--muted)}
+.idrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pid{font-family:"IBM Plex Mono",monospace;font-size:13.5px;font-weight:500}
+.tag{display:inline-block;padding:1px 7px;border-radius:4px;font-size:12px;font-weight:500}
+.adr{margin:6px 0 0;color:var(--muted);font-size:12.5px}
+.adr button{border:0;background:none;color:var(--accent);font:inherit;padding:0;cursor:pointer;text-decoration:underline}
+.figs{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden}
+.figs div{background:#fff;padding:9px 11px}
+.figs b{display:block;font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+.figs span{font-size:11.5px;color:var(--muted)}
+.rows{border-top:1px solid var(--line)}
+.row{display:flex;gap:12px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px}
+.row>span{flex:0 0 112px;color:var(--muted)}
+.row>b{font-weight:500}
+.row a{color:var(--accent)}
+.alerte{color:var(--warn)}
+
+/* jauge de constructibilité : l'élément signature */
+.gauge{border:1px solid var(--line);border-radius:var(--r-md);padding:14px 14px 12px;background:linear-gradient(#fff,#fbfaf8)}
+.gauge .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.gauge .big{line-height:1.05}
+.gauge .big{font-size:28px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:var(--accent)}
+.gauge .big small{display:block;font-size:12.5px;font-weight:400;color:var(--muted);letter-spacing:0;margin-top:2px}
+.bar{position:relative;height:30px;border-radius:5px;margin:10px 0 6px;overflow:hidden;
+  background:repeating-linear-gradient(135deg,var(--accent-soft) 0 6px,#d6e8df 6px 7px)}
+.bar i{position:absolute;inset:0 auto 0 0;background:var(--ink);border-radius:5px 0 0 5px;transition:width .6s cubic-bezier(.2,.7,.2,1)}
+.bar em{position:absolute;right:8px;top:6px;font-style:normal;font-size:12px;color:var(--accent);font-weight:600}
+.legend-g{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
+.legend-g b{color:var(--ink);font-weight:500}
+.rule{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5}
+.badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap}
+
+/* accès à pied */
+.walk{display:flex;align-items:center;gap:14px;border:1px solid var(--line);border-radius:var(--r-md);padding:12px 14px}
+.walk .min{font-size:28px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1}
+.walk .min small{font-size:13px;font-weight:500;margin-left:2px}
+.chips{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.chip{font-size:12px;padding:3px 9px;border-radius:999px;background:#f1f0eb}
+.chip i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:1px}
+
+table{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}
+td,th{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left}
+th{color:var(--muted);font-weight:500}
+td.n,th.n{text-align:right}
+details summary{cursor:pointer;color:var(--accent);font-size:13px;margin-top:8px}
+.top5 button{display:flex;width:100%;justify-content:space-between;align-items:center;gap:8px;border:0;border-bottom:1px solid var(--line);
+  background:none;padding:8px 0;font:inherit;font-size:13px;cursor:pointer;text-align:left}
+.top5 button:hover{color:var(--accent)}
+.top5 .pid{font-size:12.5px}
+.err{margin-top:24px;padding:12px 14px;border-radius:var(--r-md);background:var(--warn-soft);color:var(--warn)}
+.back{border:0;background:none;color:var(--muted);font:inherit;font-size:12.5px;padding:0;cursor:pointer;margin-bottom:10px}
+.back:hover{color:var(--accent)}
+
+/* ---------- barre des analyses ---------- */
+#analyses{position:absolute;z-index:500;top:14px;left:430px;right:70px;display:flex;gap:4px;flex-wrap:wrap;pointer-events:none}
+#analyses button{pointer-events:auto;border:1px solid var(--line);background:rgba(255,255,255,.95);padding:7px 12px;border-radius:999px;
+  font:inherit;font-size:13px;cursor:pointer;box-shadow:0 1px 3px rgba(29,36,33,.08);color:var(--ink)}
+#analyses button:hover{border-color:#c9c6bd}
+#analyses button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.leaflet-top.leaflet-right{top:0}
+.lg{background:#fff;padding:10px 12px;border-radius:var(--r-md);box-shadow:0 2px 12px rgba(29,36,33,.14);font-size:12px;max-width:250px}
+.lg b{display:block;font-size:12.5px;margin-bottom:5px}
+.lg div{display:flex;align-items:center;gap:7px;margin:2px 0}
+.lg i{flex:0 0 14px;height:10px;border-radius:2px}
+.lg p{margin:6px 0 0;color:var(--muted)}
+.fond-clair{filter:grayscale(1) contrast(.55) brightness(1.22)}
+.fond-gris{filter:grayscale(1) brightness(1.05) contrast(.9)}
+.fond-ortho{filter:grayscale(.5) brightness(.9)}
+.leaflet-tooltip{font:12px "IBM Plex Sans",sans-serif}
+
+@media (max-width:820px){
+  #panel{top:auto;left:0;right:0;bottom:0;width:auto;height:52vh;border-radius:var(--r-lg) var(--r-lg) 0 0}
+  #analyses{left:10px;right:56px;top:10px;flex-wrap:nowrap;overflow-x:auto}
+  #analyses button{flex:0 0 auto}
+  .head{padding:12px 14px 10px}.head h1{font-size:15px}.head>p,.hint{display:none}.search{margin-top:8px}
+}
+@media (max-height:560px){.head>p,.hint{display:none}}
+@media (prefers-reduced-motion:reduce){.bar i{transition:none}#body{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<div id="map" aria-label="Carte des parcelles de Gentilly"></div>
+
+<nav id="analyses" aria-label="Analyses cartographiques"></nav>
+
+<aside id="panel">
+  <div class="head">
+    <h1>Service parcellaire de Gentilly</h1>
+    <p>Cadastre, marché, PLUi, risques et accès à pied, parcelle par parcelle</p>
+    <div class="search">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg>
+      <input id="q" type="search" placeholder="Adresse, identifiant cadastral ou coordonnées" autocomplete="off" aria-label="Rechercher une parcelle">
+      <div id="sugg" role="listbox"></div>
+    </div>
+    <p class="hint">Ou cliquez sur une parcelle de la carte.<span id="demo"></span></p>
+  </div>
+  <div id="body"></div>
+</aside>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const API = location.protocol === "file:" ? "http://localhost:9010" : "/api";
+// Démo statique (GitHub Pages ou ?demo) : données précalculées dans data/, mêmes fiches que l'API
+const STATIQUE = location.hostname.endsWith("github.io") || new URLSearchParams(location.search).has("demo");
+let FICHES = null, ADRESSES = null;
+const parId = {};   // id_parcelle -> feature GeoJSON
+const nf = (v, d=0) => v == null ? "—" : Number(v).toLocaleString("fr-FR", {maximumFractionDigits:d});
+const eur = v => v == null ? "—" : nf(v) + " €";
+const $ = s => document.querySelector(s);
+
+// Accents et libellés propres (les sources GPU sont sans accents)
+const corr = [["Activites economiques","Activités économiques"],["Equipements","Équipements"],["hospitaliers/d'hebergement","hospitaliers / d'hébergement"],
+  ["equipements","équipements"],["Residentiel","Résidentiel"],["Coeur de ville","Cœur de ville"],["cimetiere","cimetière"],
+  ["Eglise du Sacre Coeur","Église du Sacré-Cœur"],["Eglise Saint Saturnin","Église Saint-Saturnin"],["Bicetre","Bicêtre"],
+  ["College neerlandais","Collège néerlandais"],["Regard n ","Regard n° "],["regards n ","regards n° "],["Medicis","Médicis"],
+  ["dateliers dartistes","d'ateliers d'artistes"],["Mire de lObservatoire","Mire de l'Observatoire"],["Guggenbuhl","Guggenbühl"],
+  ["Aqueduc des Eaux de Rungis   ","Aqueduc des eaux de Rungis, "]];
+const fr = t => t == null ? t : corr.reduce((s,[a,b]) => s.split(a).join(b), t);
+
+if(STATIQUE) document.getElementById("demo").innerHTML = ` Démo statique, résultats calculés en PostGIS le 17/10/2026 · <a href="https://github.com/mawa399/service-parcellaire-postgis-gentilly" style="color:var(--accent)">code source</a>`;
+
+// ---------- carte ----------
+const map = L.map("map", {zoomControl:false}).setView([48.8135, 2.3445], 15);
+L.control.zoom({position:"bottomright"}).addTo(map);
+const wmts = (layer, fmt="image/png") => `https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=${layer}&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=${fmt}`;
+const ign = "© IGN – Géoplateforme · Cadastre Etalab, DVF, BAN, PLUi GOSB, BRGM, IDFM, OSM";
+const fonds = {
+  "Plan IGN clair": L.tileLayer(wmts("GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2"), {attribution:ign, maxZoom:20, maxNativeZoom:19, className:"fond-clair"}),
+  "Plan IGN": L.tileLayer(wmts("GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2"), {attribution:ign, maxZoom:20, maxNativeZoom:19}),
+  "Orthophoto IGN": L.tileLayer(wmts("ORTHOIMAGERY.ORTHOPHOTOS","image/jpeg"), {attribution:ign, maxZoom:20, maxNativeZoom:19, className:"fond-ortho"}),
+  "OpenStreetMap": L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {attribution:"© OpenStreetMap", maxZoom:19, className:"fond-gris"})
+};
+fonds["Plan IGN clair"].addTo(map);
+const ctrl = L.control.layers(fonds, {}, {position:"topright"}).addTo(map);
+
+// ---------- analyses ----------
+const PLU = {UC:"#e4572e",UA:"#b03a2e",UM:"#f29e4c",UR:"#f6c85f",UHm:"#f3e5ab",UI:"#9b59b6",UE:"#5dade2",UEh:"#2e86c1",UEs:"#a9cce3",Np:"#7bc47f",N:"#2e8b57"};
+const GIS = {"Très élevé":"#1f6f5c","Élevé":"#4f9e83","Modéré":"#b7dccb","Saturé":"#d6d3d1","Grande emprise":"#efe3c2"};
+const seq = ["#ffffb2","#fecc5c","#fd8d3c","#f03b20","#bd0026"];
+const walk = ["#1f6f5c","#4f9e83","#9fcbb9","#f2d58c","#e8a05c"];
+const analyses = {
+  cadastre:{nom:"Cadastre"},
+  gisement:{nom:"Gisement foncier", champ:"classe_gisement", cat:GIS,
+    note:"Plancher constructible restant selon le PLUi, comparé au bâti existant. Parcelles < 150 m² et zones N / UE exclues."},
+  pied:{nom:"À pied", champ:"gare_proche_min", bornes:[5,8,11,14], pal:walk, fmt:v=>v+" min", iso:true,
+    note:"Temps de marche jusqu'à la gare ou station la plus proche (réseau piéton OSM, 4,5 km/h)."},
+  prix:{nom:"Prix au m²", champ:"prix_m2_median_parcelle", bornes:[4500,5500,6500,7500], pal:seq, fmt:v=>nf(v)+" €",
+    note:"Médiane des ventes de logements 2021-2025 (DVF). Contour seul : aucune vente."},
+  plu:{nom:"PLUi", champ:"zone_plu", cat:PLU},
+  risques:{nom:"Argiles", champ:"alea_argiles", cat:{Faible:"#fde68a",Moyen:"#f59e0b",Fort:"#b45309"},
+    note:"Aléa retrait-gonflement des argiles (BRGM). 83 % des parcelles sont aussi dans le PPR anciennes carrières."}
+};
+let analyse = "cadastre", parcelles, sel, marker, donnees = [];
+const ZN = {}; // libellés des zones PLUi
+
+function couleur(a, v){
+  if(v == null) return null;
+  if(a.cat) return a.cat[v] || null;
+  let i = 0; while(i < a.bornes.length && v >= a.bornes[i]) i++; return a.pal[i];
+}
+function style(f){
+  const a = analyses[analyse];
+  if(analyse === "cadastre") return {color:"#8b5cf6", weight:1, fillColor:"#8b5cf6", fillOpacity:.05};
+  const c = couleur(a, f.properties[a.champ]);
+  if(analyse === "gisement" && f.properties.classe_gisement === "Grande emprise") return {color:"#b8a46a", weight:1.2, dashArray:"3 3", fillColor:c, fillOpacity:.6};
+  return c ? {color:"#8b5cf6", weight:.8, opacity:.7, fillColor:c, fillOpacity:.8}
+           : {color:"#8b5cf6", weight:.8, opacity:.6, fillOpacity:0};
+}
+const nav = $("#analyses");
+nav.innerHTML = Object.entries(analyses).map(([k,a]) => `<button data-a="${k}" aria-pressed="${k===analyse}">${a.nom}</button>`).join("");
+nav.querySelectorAll("button").forEach(b => b.onclick = () => choisir(b.dataset.a));
+function choisir(k){
+  analyse = k;
+  nav.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.a === k));
+  parcelles && parcelles.setStyle(style);
+  if(analyses[k].iso) { iso.addTo(map); iso.bringToBack(); } else map.removeLayer(iso);
+  k === "cadastre" ? batiments.addTo(map) : map.removeLayer(batiments);
+  legende();
+}
+
+// ---------- couches ----------
+const batiments = L.geoJSON(null, {style:{color:"#b91c1c", weight:.6, fillColor:"#b91c1c", fillOpacity:.45}, interactive:false}).addTo(map);
+const iso = L.geoJSON(null, {style:f => ({color:"#1f6f5c", weight:{5:2,10:1.5,15:1.2}[f.properties.minutes], dashArray:{5:null,10:"6 4",15:"2 4"}[f.properties.minutes], fill:false, opacity:.9}), interactive:false});
+const MODE = {RER:"#2563eb", METRO:"#0f766e", TRAMWAY:"#be185d"};
+const gares = L.geoJSON(null, {
+  pointToLayer:(f, ll) => L.circleMarker(ll, {radius:6, color:"#fff", weight:2, fillColor:MODE[f.properties.mode]||"#555", fillOpacity:1}),
+  onEachFeature:(f, l) => l.bindTooltip(`${f.properties.nom} · ${f.properties.ligne}`)
+}).addTo(map);
+const zonage = L.geoJSON(null, {style:f => ({color:PLU[f.properties.code]||"#999", weight:1.5, dashArray:"4 3", fill:false}), interactive:false,
+  onEachFeature:f => ZN[f.properties.code] = fr(f.properties.nom)});
+
+const charger = (c, n=5000) => fetch(STATIQUE ? `data/${c}.geojson` : `${API}/collections/gentilly.${c}/items.json?limit=${n}`)
+  .then(r => { if(!r.ok) throw r; return r.json(); });
+charger("carte_parcelles").then(gj => {
+  donnees = gj.features.map(f => f.properties);
+  gj.features.forEach(f => parId[f.properties.id_parcelle] = f);
+  parcelles = L.geoJSON(gj, {style, onEachFeature:(f, l) => l.on("click", e => { L.DomEvent.stop(e); interroger("id", f.properties.id_parcelle, e.latlng); })}).addTo(map);
+  ctrl.addOverlay(parcelles, "Parcelles");
+  map.fitBounds(parcelles.getBounds(), {paddingTopLeft:[innerWidth > 820 ? 420 : 0, 40]});
+  const h = decodeURIComponent(location.hash.slice(1));
+  h ? interroger("id", h) : accueil();
+}).catch(() => erreur(STATIQUE ? "Les données de la démo n'ont pas pu être chargées. Rechargez la page." : "L'API ne répond pas. Lancez lancer_service.bat, puis rechargez la page."));
+charger("carte_batiments").then(gj => { batiments.addData(gj); ctrl.addOverlay(batiments, "Bâtiments"); });
+charger("carte_gares", 500).then(gj => { gares.addData(gj); ctrl.addOverlay(gares, "Gares et stations"); });
+charger("carte_plu", 500).then(gj => { zonage.addData(gj); ctrl.addOverlay(zonage, "Zonage PLUi (contours)"); legende(); });
+charger("carte_isochrones", 10).then(gj => iso.addData(gj));
+
+// ---------- légende ----------
+const lg = L.control({position:"bottomright"});
+lg.onAdd = () => L.DomUtil.create("div", "lg"); lg.addTo(map);
+function legende(){
+  const a = analyses[analyse], d = lg.getContainer(); let h = `<b>${a.nom}</b>`;
+  if(analyse === "cadastre"){
+    h += `<div><i style="background:rgba(139,92,246,.1);border:1px solid #8b5cf6"></i>Parcelles</div><div><i style="background:rgba(185,28,28,.45)"></i>Bâtiments</div>`
+       + `<div><i style="background:#2563eb;border-radius:50%;flex-basis:10px;height:10px"></i>RER <i style="background:#0f766e;border-radius:50%;flex-basis:10px;height:10px;margin-left:6px"></i>Métro <i style="background:#be185d;border-radius:50%;flex-basis:10px;height:10px;margin-left:6px"></i>Tram</div>`;
+  } else if(a.cat){
+    h += Object.entries(a.cat).map(([k,c]) => `<div><i style="background:${c}"></i>${k}${analyse==="plu" && ZN[k] ? " · " + ZN[k] : ""}</div>`).join("");
+  } else {
+    h += `<div><i style="background:${a.pal[0]}"></i>moins de ${a.fmt(a.bornes[0])}</div>`;
+    a.bornes.forEach((b, i) => h += `<div><i style="background:${a.pal[i+1]}"></i>${a.fmt(b)}${a.bornes[i+1] != null ? " à " + a.fmt(a.bornes[i+1]) : " et plus"}</div>`);
+    if(a.iso) h += `<div><i style="height:0;border-top:2px solid #1f6f5c"></i>5 min</div><div><i style="height:0;border-top:2px dashed #1f6f5c"></i>10 min</div><div><i style="height:0;border-top:2px dotted #1f6f5c"></i>15 min autour des gares</div>`;
+  }
+  if(a.note) h += `<p>${a.note}</p>`;
+  d.innerHTML = h;
+}
+legende();
+
+// ---------- démo statique : les trois portes côté navigateur ----------
+const norm = t => (t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+const trig = t => { const g = new Set(); t.split(" ").filter(Boolean).forEach(w => { const m = "  " + w + " "; for(let i = 0; i < m.length - 2; i++) g.add(m.slice(i, i+3)); }); return g; };
+const simMot = (q, c) => { const a = trig(q), b = trig(c); if(!a.size) return 0; let n = 0; a.forEach(x => b.has(x) && n++); return n / a.size; };
+async function chargerStatique(){
+  if(!FICHES) [FICHES, ADRESSES] = await Promise.all([fetch("data/fiches.json").then(r => r.json()), fetch("data/adresses.json").then(r => r.json())]);
+}
+async function geocoderLocal(v, n){   // même logique que gentilly.geocoder : voie par trigrammes, puis numéro le plus proche
+  await chargerStatique();
+  const s = norm(v), num = parseInt((s.match(/^(\d+)/) || [])[1]);
+  const voie = s.replace(/^\d+\s*(bis|ter|quater|b|t)?\s+/, "").replace(/\s*(94250|gentilly)\s*/g, " ").trim();
+  if(!voie) return [];
+  const sims = {}; ADRESSES.forEach(a => { if(!(a[1] in sims)) sims[a[1]] = simMot(voie, a[1]); });
+  return ADRESSES.filter(a => sims[a[1]] >= 0.5)
+    .map(a => ({libelle:a[0], id_parcelle:a[4], lon:a[5], lat:a[6], sim:sims[a[1]], exact:a[1] === voie, d:isNaN(num) || a[2] == null ? 0 : Math.abs(a[2] - num), rep:a[3]}))
+    .sort((x, y) => y.sim - x.sim || y.exact - x.exact || x.d - y.d || (x.rep ? 1 : 0) - (y.rep ? 1 : 0)).slice(0, n);
+}
+function dansAnneau(pt, r){ let c = false; for(let i = 0, j = r.length - 1; i < r.length; j = i++){ const [xi, yi] = r[i], [xj, yj] = r[j];
+  if(((yi > pt[1]) !== (yj > pt[1])) && pt[0] < (xj - xi) * (pt[1] - yi) / (yj - yi) + xi) c = !c; } return c; }
+const polys = g => g.type === "MultiPolygon" ? g.coordinates : [g.coordinates];
+const dedans = (pt, g) => polys(g).some(p => dansAnneau(pt, p[0]) && !p.slice(1).some(h => dansAnneau(pt, h)));
+function distM(pt, g){   // distance (m) du point au contour, projection locale
+  const kx = 111320 * Math.cos(pt[1] * Math.PI / 180), ky = 110540; let best = Infinity;
+  polys(g).forEach(p => p.forEach(r => { for(let i = 1; i < r.length; i++){
+    const ax = (r[i-1][0]-pt[0])*kx, ay = (r[i-1][1]-pt[1])*ky, bx = (r[i][0]-pt[0])*kx, by = (r[i][1]-pt[1])*ky;
+    const dx = bx-ax, dy = by-ay, t = Math.max(0, Math.min(1, -(ax*dx + ay*dy) / ((dx*dx + dy*dy) || 1)));
+    best = Math.min(best, Math.hypot(ax + t*dx, ay + t*dy)); } }));
+  return best;
+}
+async function interrogerLocal(mode, v){
+  await chargerStatique(); let id = null;
+  if(mode === "id") id = String(v).trim().toUpperCase();
+  else if(mode === "adresse") id = ((await geocoderLocal(v, 1))[0] || {}).id_parcelle;
+  else { const pt = [v.lng, v.lat]; const f = Object.values(parId).find(f => dedans(pt, f.geometry));
+    if(f) id = f.properties.id_parcelle;
+    else { let m = 15; Object.values(parId).forEach(f => { const d = distM(pt, f.geometry); if(d <= m){ m = d; id = f.properties.id_parcelle; } }); } }
+  return id && FICHES[id] && parId[id] ? {features:[{type:"Feature", geometry:parId[id].geometry, properties:FICHES[id]}]} : {features:[]};
+}
+
+// ---------- recherche unifiée : trois entrées, un seul moteur ----------
+const q = $("#q"), sugg = $("#sugg"); let t, idx = -1, gen = 0;
+const estId = v => /^\s*94037\d{3}[A-Z]{1,2}\d{4}\s*$/i.test(v.replace(/\s/g,"")) || /^\s*940370000[A-Z]\d{4}\s*$/i.test(v);
+const coords = v => { const m = v.match(/^\s*(-?\d+(?:[.,]\d+)?)\s*[;,\s]\s*(-?\d+(?:[.,]\d+)?)\s*$/); if(!m) return null;
+  let a = +m[1].replace(",","."), b = +m[2].replace(",","."); return a > 40 ? L.latLng(a, b) : L.latLng(b, a); };
+q.addEventListener("input", () => { clearTimeout(t); idx = -1; const v = q.value.trim(), g = ++gen;
+  if(v.length < 3 || estId(v) || coords(v)) { sugg.style.display = "none"; return; }
+  t = setTimeout(async () => {
+    const r = STATIQUE ? {features:(await geocoderLocal(v, 6)).map(a => ({properties:a}))}
+            : await fetch(`${API}/functions/gentilly.geocoder/items.json?p_adresse=${encodeURIComponent(v)}&p_limite=6`).then(r => r.json());
+    if(g !== gen) return;   // une recherche a été lancée entre-temps
+    sugg.innerHTML = r.features.map(f => `<button role="option" data-l="${f.properties.libelle}">${f.properties.libelle}</button>`).join("");
+    sugg.style.display = r.features.length ? "block" : "none";
+    sugg.querySelectorAll("button").forEach(b => b.onclick = () => { q.value = b.dataset.l; sugg.style.display = "none"; lancer(); });
+  }, 180);
+});
+q.addEventListener("keydown", e => {
+  const items = [...sugg.querySelectorAll("button")];
+  if(e.key === "ArrowDown" && items.length){ e.preventDefault(); idx = (idx + 1) % items.length; }
+  else if(e.key === "ArrowUp" && items.length){ e.preventDefault(); idx = (idx - 1 + items.length) % items.length; }
+  else if(e.key === "Enter"){ if(idx >= 0 && items[idx]) q.value = items[idx].dataset.l; sugg.style.display = "none"; lancer(); return; }
+  else if(e.key === "Escape"){ sugg.style.display = "none"; return; }
+  items.forEach((b, i) => b.classList.toggle("on", i === idx));
+});
+function lancer(){ clearTimeout(t); gen++; sugg.style.display = "none"; const v = q.value.trim(); if(!v) return;
+  if(estId(v)) interroger("id", v.replace(/\s/g,"").toUpperCase());
+  else if(coords(v)) { const ll = coords(v); interroger("coords", ll, ll); }
+  else interroger("adresse", v);
+}
+map.on("click", e => { q.value = `${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`; interroger("coords", e.latlng, e.latlng); });
+
+async function interroger(mode, v, latlng){
+  const url = mode === "adresse" ? `parcelle_par_adresse/items.json?p_adresse=${encodeURIComponent(v)}`
+            : mode === "coords"  ? `parcelle_par_coords/items.json?p_lon=${v.lng}&p_lat=${v.lat}`
+            : `parcelle_par_id/items.json?p_id=${encodeURIComponent(v)}`;
+  if(marker) map.removeLayer(marker);
+  if(latlng) marker = L.circleMarker(latlng, {radius:6, color:"#fff", weight:2, fillColor:"#1d4ed8", fillOpacity:1}).addTo(map);
+  try{
+    const gj = STATIQUE ? await interrogerLocal(mode, v) : await fetch(`${API}/functions/gentilly.${url}`).then(r => r.json());
+    if(!gj.features || !gj.features.length)
+      return erreur(mode === "adresse" ? "Adresse introuvable à Gentilly. Vérifiez le nom de la voie ou choisissez une suggestion."
+                  : mode === "coords" ? "Aucune parcelle à moins de 15 m de ce point. Cliquez à l'intérieur de Gentilly."
+                  : "Identifiant inconnu. Format attendu : 940370000K0189.");
+    fiche(gj.features[0]);
+  }catch(e){ erreur("L'API ne répond pas. Lancez lancer_service.bat, puis rechargez la page."); }
+}
+
+// ---------- vues du panneau ----------
+const body = $("#body");
+function erreur(m){ body.innerHTML = `<div class="err">${m}</div>`; if(sel) map.removeLayer(sel); }
+
+function accueil(){
+  if(sel) map.removeLayer(sel); if(marker) map.removeLayer(marker);
+  history.replaceState(null, "", location.pathname);
+  const n = donnees.length, med = a => { const s = a.filter(x => x != null).sort((x,y) => x-y); return s[Math.floor(s.length/2)]; };
+  const fort = donnees.filter(p => p.classe_gisement === "Très élevé" || p.classe_gisement === "Élevé");
+  const top = donnees.filter(p => p.classe_gisement === "Très élevé").sort((a,b) => b.gisement_m2 - a.gisement_m2).slice(0, 6);
+  const dix = donnees.filter(p => p.gare_proche_min <= 10).length;
+  body.innerHTML = `
+    <div class="figs">
+      <div><b>${nf(n)}</b><span>parcelles</span></div>
+      <div><b>${med(donnees.map(p => p.gare_proche_min))} min</b><span>médiane à pied d'une gare</span></div>
+      <div><b>${Math.round(100*dix/n)} %</b><span>à 10 min ou moins</span></div>
+      <div><b>${nf(fort.length)}</b><span>gisements élevés</span></div>
+      <div><b>${nf(Math.round(fort.reduce((s,p) => s + (p.gisement_m2||0), 0)/1000))} k m²</b><span>de plancher en gisement</span></div>
+      <div><b>6 094 €</b><span>prix médian au m²</span></div>
+    </div>
+    <h2>Plus forts gisements <small>parcelles de 150 à 5 000 m²</small></h2>
+    <div class="top5">${top.map(p => `<button data-id="${p.id_parcelle}"><span><span class="pid">${p.id_parcelle}</span> <span class="tag" style="background:${PLU[p.zone_plu]};color:${["UA","UI","UC","N","UEh"].includes(p.zone_plu)?"#fff":"#1d2421"}">${p.zone_plu}</span></span><span>+${nf(p.gisement_m2)} m²</span></button>`).join("")}</div>
+    <p class="muted" style="font-size:12.5px;margin-top:14px">Le gisement est le plancher que le PLUi permettrait encore de construire, d'après l'emprise au sol et la hauteur maximales de la zone, moins le bâti existant estimé avec la BD TOPO. C'est un ordre de grandeur théorique, pas une étude de faisabilité.</p>`;
+  body.querySelectorAll(".top5 button").forEach(b => b.onclick = () => interroger("id", b.dataset.id));
+}
+
+function fiche(f){
+  const p = f.properties;
+  let ventes = p.ventes; if(typeof ventes === "string") ventes = JSON.parse(ventes); ventes = ventes || [];
+  history.replaceState(null, "", "#" + p.id_parcelle);
+  if(sel) map.removeLayer(sel);
+  sel = L.geoJSON(f, {style:{color:"#1d4ed8", weight:4, fill:false}, interactive:false}).addTo(map);
+  map.fitBounds(sel.getBounds(), {maxZoom:18, paddingTopLeft:[innerWidth > 820 ? 430 : 20, 70], paddingBottomRight:[40, innerWidth > 820 ? 40 : innerHeight*.62]});
+
+  const adr = p.adresses ? p.adresses.split(" ; ") : [];
+  const adrHtml = !adr.length ? "Aucune adresse BAN rattachée"
+    : adr.length <= 2 ? adr.join("<br>") : `${adr.slice(0,2).join("<br>")}<br><button id="plus">et ${adr.length - 2} autre${adr.length - 2 > 1 ? "s" : ""} adresse${adr.length - 2 > 1 ? "s" : ""}</button>`;
+  const zc = PLU[p.zone_plu] || "#ddd", zt = ["UA","UI","UC","N","UEh"].includes(p.zone_plu) ? "#fff" : "#1d2421";
+
+  // jauge
+  const cl = p.classe_gisement, calc = p.sdp_theorique_m2 > 0 && !["Non concerné"].includes(cl);
+  const tx = Math.min(100, p.taux_utilisation_pct || 0);
+  const gauge = calc ? `
+    <div class="gauge">
+      <div class="top"><span class="big">+${nf(p.gisement_m2)} m²<small>de plancher encore constructible</small></span>
+        <span class="badge" style="background:${GIS[cl] || "#eee"};color:${["Très élevé","Élevé"].includes(cl)?"#fff":"#1d2421"}">${cl === "Trop petite" ? "Parcelle trop petite" : "Gisement " + cl.toLowerCase()}</span></div>
+      <div class="bar" role="img" aria-label="Bâti existant ${tx} % du plancher autorisé"><i style="width:0" data-w="${tx}%"></i>${tx < 85 ? `<em>reste ${100 - tx} %</em>` : ""}</div>
+      <div class="legend-g"><span>Existant <b>${nf(p.sdp_existante_m2)} m²</b> (${nf(p.taux_utilisation_pct)} %)</span><span>Autorisé <b>${nf(p.sdp_theorique_m2)} m²</b></span></div>
+      <div class="rule">Zone ${p.zone_plu} : emprise au sol ${p.regle_emprise}, hauteur ${p.regle_hauteur}. <a href="${p.plu_document_url}" target="_blank" rel="noopener">Règlement du PLUi</a>, articles 3.1.5 et 3.1.7.${cl === "Grande emprise" ? " Grande parcelle : les règles de prospect et de pleine terre limitent fortement ce maximum, à étudier au cas par cas." : ""}</div>
+    </div>`
+    : `<div class="gauge"><div class="rule" style="margin:0">${p.regle_emprise === "Non réglementée" ? "L'emprise au sol n'est pas réglementée dans cette zone : pas de potentiel calculable." : "Zone naturelle ou d'équipement : le potentiel constructible n'est pas évalué."} Zone ${p.zone_plu}, hauteur ${p.regle_hauteur || "—"}.</div></div>`;
+
+  const ec = p.ecart_prix_pct;
+  body.innerHTML = `
+    <button class="back" id="retour">← Vue d'ensemble de la commune</button>
+    <div class="idrow"><span class="pid">${p.id_parcelle}</span><span class="tag" style="background:${zc};color:${zt}">${p.zone_plu}</span><span class="muted" style="font-size:12.5px">section ${p.section}, n° ${p.numero}</span></div>
+    <p class="adr">${adrHtml}</p>
+
+    <h2>Constructibilité <small>selon le PLUi</small></h2>
+    ${gauge}
+
+    <h2>Accès à pied</h2>
+    <div class="walk"><div class="min">${nf(p.gare_proche_min)}<small>min</small></div>
+      <div><div>jusqu'à <b>${p.gare_proche || "—"}</b></div><div class="muted" style="font-size:12.5px">${nf(p.gare_proche_marche_m)} m sur le réseau piéton</div>
+      <div class="chips"><span class="chip"><i style="background:#2563eb"></i>RER ${nf(p.min_rer)} min</span><span class="chip"><i style="background:#0f766e"></i>Métro ${nf(p.min_metro)} min</span><span class="chip"><i style="background:#be185d"></i>Tram ${nf(p.min_tram)} min</span></div></div></div>
+
+    <h2>Marché immobilier <small>DVF 2021-2025</small></h2>
+    <div class="figs">
+      <div><b>${p.prix_m2_median_parcelle ? eur(p.prix_m2_median_parcelle) : "—"}</b><span>médiane parcelle</span></div>
+      <div><b>${eur(p.prix_m2_median_gentilly)}</b><span>médiane Gentilly</span></div>
+      <div><b class="${ec==null?"":(ec<0?"":"alerte")}">${ec==null ? "—" : (ec>0?"+":"") + nf(ec,1) + " %"}</b><span>écart</span></div>
+    </div>
+    ${ventes.length ? `<details><summary>${ventes.length} vente${ventes.length>1?"s":""} sur la période</summary>
+      <table><tr><th>Date</th><th>Biens</th><th class="n">Valeur</th><th class="n">€/m²</th></tr>
+      ${ventes.map(v => `<tr><td>${new Date(v.date).toLocaleDateString("fr-FR")}</td><td>${v.types || v.nature}</td><td class="n">${eur(v.valeur)}</td><td class="n">${v.prix_m2 ? nf(v.prix_m2) : "—"}</td></tr>`).join("")}</table></details>`
+      : `<p class="muted" style="font-size:12.5px;margin:8px 0 0">Aucune vente sur la période.</p>`}
+
+    <h2>Urbanisme et risques</h2>
+    <div class="rows">
+      <div class="row"><span>Zone PLUi</span><b>${p.zone_plu} · ${fr(p.zone_plu_libelle) || ""}</b></div>
+      ${p.zones_plu_detail && p.zones_plu_detail.includes("·") ? `<div class="row"><span>Répartition</span><b>${p.zones_plu_detail}</b></div>` : ""}
+      <div class="row"><span>Patrimoine</span><b>${p.abords_monuments ? "Abords de : " + fr(p.abords_monuments).split(" ; ").join(", ") : "Hors abords de monument historique"}</b></div>
+      <div class="row"><span>Anciennes carrières</span><b>${p.risque_carrieres ? '<span class="alerte">Dans le périmètre du PPR mouvements de terrain</span>' : "Hors périmètre du PPR"}</b></div>
+      <div class="row"><span>Argiles</span><b>${p.alea_argiles ? "Aléa " + p.alea_argiles.toLowerCase() : "Aléa nul ou non cartographié"}</b></div>
+    </div>
+
+    <h2>Terrain et bâti</h2>
+    <div class="figs">
+      <div><b>${nf(p.surface_m2)} m²</b><span>surface</span></div>
+      <div><b>${nf(p.nb_batiments)}</b><span>bâtiments</span></div>
+      <div><b>${nf(p.taux_emprise_pct,1)} %</b><span>emprise bâtie</span></div>
+      <div><b>${nf(p.pente_mediane_pct,1)} %</b><span>pente médiane</span></div>
+      <div><b>${nf(p.altitude_moy_m,0)} m</b><span>altitude</span></div>
+      <div><b>${nf(p.nb_ventes_5ans)}</b><span>ventes en 5 ans</span></div>
+    </div>`;
+  $("#retour").onclick = accueil;
+  const plus = $("#plus"); if(plus) plus.onclick = () => $(".adr").innerHTML = adr.join("<br>");
+  body.scrollTop = 0;
+  requestAnimationFrame(() => { const i = body.querySelector(".bar i"); if(i) i.style.width = i.dataset.w; });
+}
+</script>
+</body>
+</html>

@@ -4,6 +4,8 @@ Service web spatial qui renvoie la **fiche complète d'une parcelle cadastrale**
 
 Tous les calculs sont faits dans **PostgreSQL / PostGIS** (SQL spatial, raster, PL/pgSQL, pgRouting), exposés en API GeoJSON par **pg_featureserv** et affichés dans une carte **Leaflet**.
 
+**[Ouvrir la démo en ligne](https://mawa399.github.io/service-parcellaire-postgis-gentilly/)** : la carte et les 1 605 fiches, sans rien installer.
+
 ![Vue d'ensemble et analyse du gisement foncier](docs/apercu_gisement.jpg)
 
 ## Ce que fait le service
@@ -85,6 +87,10 @@ Prérequis : PostgreSQL avec PostGIS, postgis_raster et pgRouting (fournis par l
    Pour `08_couches_api.sql`, choisir le mot de passe de l'API : `psql -d gentilly -v mdp="'votre_mot_de_passe'" -f sql/08_couches_api.sql`.
 5. **API** : télécharger [pg_featureserv pour Windows](https://postgisftw.s3.amazonaws.com/pg_featureserv_latest_windows.zip) et le décompresser dans `pg_featureserv/`. Copier `config/pg_featureserv.toml.example` en `pg_featureserv.toml` et y mettre le mot de passe.
 6. **Lancer** : double-cliquer sur `lancer_service.bat`, ce qui ouvre http://localhost:8010.
+
+### Démo statique (GitHub Pages)
+
+La démo en ligne n'utilise ni base ni API : `scripts/exporter_demo_qgis.py` exporte dans `docs/data/` les fiches calculées par le moteur pour les 1 605 parcelles, ainsi que les couches et les adresses. `docs/index.html` (copie de `web/index.html`) détecte qu'il est servi depuis github.io, ou ouvert avec `?demo`, et reproduit les trois portes dans le navigateur : géocodage par trigrammes, point dans la parcelle avec repli à 15 m, identifiant. Les réponses sont identiques à celles de l'API.
 
 ## Limites
 

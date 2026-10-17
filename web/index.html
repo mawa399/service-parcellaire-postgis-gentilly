@@ -133,7 +133,7 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px;margin-top:8px
       <input id="q" type="search" placeholder="Adresse, identifiant cadastral ou coordonnées" autocomplete="off" aria-label="Rechercher une parcelle">
       <div id="sugg" role="listbox"></div>
     </div>
-    <p class="hint">Ou cliquez sur une parcelle de la carte.</p>
+    <p class="hint">Ou cliquez sur une parcelle de la carte.<span id="demo"></span></p>
   </div>
   <div id="body"></div>
 </aside>
@@ -141,6 +141,10 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px;margin-top:8px
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 const API = location.protocol === "file:" ? "http://localhost:9010" : "/api";
+// Démo statique (GitHub Pages ou ?demo) : données précalculées dans data/, mêmes fiches que l'API
+const STATIQUE = location.hostname.endsWith("github.io") || new URLSearchParams(location.search).has("demo");
+let FICHES = null, ADRESSES = null;
+const parId = {};   // id_parcelle -> feature GeoJSON
 const nf = (v, d=0) => v == null ? "—" : Number(v).toLocaleString("fr-FR", {maximumFractionDigits:d});
 const eur = v => v == null ? "—" : nf(v) + " €";
 const $ = s => document.querySelector(s);
@@ -153,6 +157,8 @@ const corr = [["Activites economiques","Activités économiques"],["Equipements"
   ["dateliers dartistes","d'ateliers d'artistes"],["Mire de lObservatoire","Mire de l'Observatoire"],["Guggenbuhl","Guggenbühl"],
   ["Aqueduc des Eaux de Rungis   ","Aqueduc des eaux de Rungis, "]];
 const fr = t => t == null ? t : corr.reduce((s,[a,b]) => s.split(a).join(b), t);
+
+if(STATIQUE) document.getElementById("demo").innerHTML = ` Démo statique, résultats calculés en PostGIS le 17/10/2026 · <a href="https://github.com/mawa399/service-parcellaire-postgis-gentilly" style="color:var(--accent)">code source</a>`;
 
 // ---------- carte ----------
 const map = L.map("map", {zoomControl:false}).setView([48.8135, 2.3445], 15);
@@ -224,15 +230,17 @@ const gares = L.geoJSON(null, {
 const zonage = L.geoJSON(null, {style:f => ({color:PLU[f.properties.code]||"#999", weight:1.5, dashArray:"4 3", fill:false}), interactive:false,
   onEachFeature:f => ZN[f.properties.code] = fr(f.properties.nom)});
 
-const charger = (c, n=5000) => fetch(`${API}/collections/gentilly.${c}/items.json?limit=${n}`).then(r => { if(!r.ok) throw r; return r.json(); });
+const charger = (c, n=5000) => fetch(STATIQUE ? `data/${c}.geojson` : `${API}/collections/gentilly.${c}/items.json?limit=${n}`)
+  .then(r => { if(!r.ok) throw r; return r.json(); });
 charger("carte_parcelles").then(gj => {
   donnees = gj.features.map(f => f.properties);
+  gj.features.forEach(f => parId[f.properties.id_parcelle] = f);
   parcelles = L.geoJSON(gj, {style, onEachFeature:(f, l) => l.on("click", e => { L.DomEvent.stop(e); interroger("id", f.properties.id_parcelle, e.latlng); })}).addTo(map);
   ctrl.addOverlay(parcelles, "Parcelles");
   map.fitBounds(parcelles.getBounds(), {paddingTopLeft:[innerWidth > 820 ? 420 : 0, 40]});
   const h = decodeURIComponent(location.hash.slice(1));
   h ? interroger("id", h) : accueil();
-}).catch(() => erreur("L'API ne répond pas. Lancez lancer_service.bat, puis rechargez la page."));
+}).catch(() => erreur(STATIQUE ? "Les données de la démo n'ont pas pu être chargées. Rechargez la page." : "L'API ne répond pas. Lancez lancer_service.bat, puis rechargez la page."));
 charger("carte_batiments").then(gj => { batiments.addData(gj); ctrl.addOverlay(batiments, "Bâtiments"); });
 charger("carte_gares", 500).then(gj => { gares.addData(gj); ctrl.addOverlay(gares, "Gares et stations"); });
 charger("carte_plu", 500).then(gj => { zonage.addData(gj); ctrl.addOverlay(zonage, "Zonage PLUi (contours)"); legende(); });
@@ -258,15 +266,56 @@ function legende(){
 }
 legende();
 
+// ---------- démo statique : les trois portes côté navigateur ----------
+const norm = t => (t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+const trig = t => { const g = new Set(); t.split(" ").filter(Boolean).forEach(w => { const m = "  " + w + " "; for(let i = 0; i < m.length - 2; i++) g.add(m.slice(i, i+3)); }); return g; };
+const simMot = (q, c) => { const a = trig(q), b = trig(c); if(!a.size) return 0; let n = 0; a.forEach(x => b.has(x) && n++); return n / a.size; };
+async function chargerStatique(){
+  if(!FICHES) [FICHES, ADRESSES] = await Promise.all([fetch("data/fiches.json").then(r => r.json()), fetch("data/adresses.json").then(r => r.json())]);
+}
+async function geocoderLocal(v, n){   // même logique que gentilly.geocoder : voie par trigrammes, puis numéro le plus proche
+  await chargerStatique();
+  const s = norm(v), num = parseInt((s.match(/^(\d+)/) || [])[1]);
+  const voie = s.replace(/^\d+\s*(bis|ter|quater|b|t)?\s+/, "").replace(/\s*(94250|gentilly)\s*/g, " ").trim();
+  if(!voie) return [];
+  const sims = {}; ADRESSES.forEach(a => { if(!(a[1] in sims)) sims[a[1]] = simMot(voie, a[1]); });
+  return ADRESSES.filter(a => sims[a[1]] >= 0.5)
+    .map(a => ({libelle:a[0], id_parcelle:a[4], lon:a[5], lat:a[6], sim:sims[a[1]], exact:a[1] === voie, d:isNaN(num) || a[2] == null ? 0 : Math.abs(a[2] - num), rep:a[3]}))
+    .sort((x, y) => y.sim - x.sim || y.exact - x.exact || x.d - y.d || (x.rep ? 1 : 0) - (y.rep ? 1 : 0)).slice(0, n);
+}
+function dansAnneau(pt, r){ let c = false; for(let i = 0, j = r.length - 1; i < r.length; j = i++){ const [xi, yi] = r[i], [xj, yj] = r[j];
+  if(((yi > pt[1]) !== (yj > pt[1])) && pt[0] < (xj - xi) * (pt[1] - yi) / (yj - yi) + xi) c = !c; } return c; }
+const polys = g => g.type === "MultiPolygon" ? g.coordinates : [g.coordinates];
+const dedans = (pt, g) => polys(g).some(p => dansAnneau(pt, p[0]) && !p.slice(1).some(h => dansAnneau(pt, h)));
+function distM(pt, g){   // distance (m) du point au contour, projection locale
+  const kx = 111320 * Math.cos(pt[1] * Math.PI / 180), ky = 110540; let best = Infinity;
+  polys(g).forEach(p => p.forEach(r => { for(let i = 1; i < r.length; i++){
+    const ax = (r[i-1][0]-pt[0])*kx, ay = (r[i-1][1]-pt[1])*ky, bx = (r[i][0]-pt[0])*kx, by = (r[i][1]-pt[1])*ky;
+    const dx = bx-ax, dy = by-ay, t = Math.max(0, Math.min(1, -(ax*dx + ay*dy) / ((dx*dx + dy*dy) || 1)));
+    best = Math.min(best, Math.hypot(ax + t*dx, ay + t*dy)); } }));
+  return best;
+}
+async function interrogerLocal(mode, v){
+  await chargerStatique(); let id = null;
+  if(mode === "id") id = String(v).trim().toUpperCase();
+  else if(mode === "adresse") id = ((await geocoderLocal(v, 1))[0] || {}).id_parcelle;
+  else { const pt = [v.lng, v.lat]; const f = Object.values(parId).find(f => dedans(pt, f.geometry));
+    if(f) id = f.properties.id_parcelle;
+    else { let m = 15; Object.values(parId).forEach(f => { const d = distM(pt, f.geometry); if(d <= m){ m = d; id = f.properties.id_parcelle; } }); } }
+  return id && FICHES[id] && parId[id] ? {features:[{type:"Feature", geometry:parId[id].geometry, properties:FICHES[id]}]} : {features:[]};
+}
+
 // ---------- recherche unifiée : trois entrées, un seul moteur ----------
-const q = $("#q"), sugg = $("#sugg"); let t, idx = -1;
+const q = $("#q"), sugg = $("#sugg"); let t, idx = -1, gen = 0;
 const estId = v => /^\s*94037\d{3}[A-Z]{1,2}\d{4}\s*$/i.test(v.replace(/\s/g,"")) || /^\s*940370000[A-Z]\d{4}\s*$/i.test(v);
 const coords = v => { const m = v.match(/^\s*(-?\d+(?:[.,]\d+)?)\s*[;,\s]\s*(-?\d+(?:[.,]\d+)?)\s*$/); if(!m) return null;
   let a = +m[1].replace(",","."), b = +m[2].replace(",","."); return a > 40 ? L.latLng(a, b) : L.latLng(b, a); };
-q.addEventListener("input", () => { clearTimeout(t); idx = -1; const v = q.value.trim();
+q.addEventListener("input", () => { clearTimeout(t); idx = -1; const v = q.value.trim(), g = ++gen;
   if(v.length < 3 || estId(v) || coords(v)) { sugg.style.display = "none"; return; }
   t = setTimeout(async () => {
-    const r = await fetch(`${API}/functions/gentilly.geocoder/items.json?p_adresse=${encodeURIComponent(v)}&p_limite=6`).then(r => r.json());
+    const r = STATIQUE ? {features:(await geocoderLocal(v, 6)).map(a => ({properties:a}))}
+            : await fetch(`${API}/functions/gentilly.geocoder/items.json?p_adresse=${encodeURIComponent(v)}&p_limite=6`).then(r => r.json());
+    if(g !== gen) return;   // une recherche a été lancée entre-temps
     sugg.innerHTML = r.features.map(f => `<button role="option" data-l="${f.properties.libelle}">${f.properties.libelle}</button>`).join("");
     sugg.style.display = r.features.length ? "block" : "none";
     sugg.querySelectorAll("button").forEach(b => b.onclick = () => { q.value = b.dataset.l; sugg.style.display = "none"; lancer(); });
@@ -280,7 +329,7 @@ q.addEventListener("keydown", e => {
   else if(e.key === "Escape"){ sugg.style.display = "none"; return; }
   items.forEach((b, i) => b.classList.toggle("on", i === idx));
 });
-function lancer(){ const v = q.value.trim(); if(!v) return;
+function lancer(){ clearTimeout(t); gen++; sugg.style.display = "none"; const v = q.value.trim(); if(!v) return;
   if(estId(v)) interroger("id", v.replace(/\s/g,"").toUpperCase());
   else if(coords(v)) { const ll = coords(v); interroger("coords", ll, ll); }
   else interroger("adresse", v);
@@ -294,7 +343,7 @@ async function interroger(mode, v, latlng){
   if(marker) map.removeLayer(marker);
   if(latlng) marker = L.circleMarker(latlng, {radius:6, color:"#fff", weight:2, fillColor:"#1d4ed8", fillOpacity:1}).addTo(map);
   try{
-    const gj = await fetch(`${API}/functions/gentilly.${url}`).then(r => r.json());
+    const gj = STATIQUE ? await interrogerLocal(mode, v) : await fetch(`${API}/functions/gentilly.${url}`).then(r => r.json());
     if(!gj.features || !gj.features.length)
       return erreur(mode === "adresse" ? "Adresse introuvable à Gentilly. Vérifiez le nom de la voie ou choisissez une suggestion."
                   : mode === "coords" ? "Aucune parcelle à moins de 15 m de ce point. Cliquez à l'intérieur de Gentilly."

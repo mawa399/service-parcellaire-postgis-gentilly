@@ -1,5 +1,5 @@
 # Données téléchargées (scripts/telecharger_donnees.py)
-data/
+/data/
 # Configuration contenant le mot de passe de l'API
 pg_featureserv/config/pg_featureserv.toml
 # Binaire et fichiers de pg_featureserv (à télécharger, voir README)
